@@ -1,51 +1,90 @@
 name: Main workflow
 on: [push, pull_request]
+env:
+  SQLX_VERSION: 0.7
+  SQLX_FEATURES: "rustls,postgres"
 jobs:
-    build:
-        name: Build
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: Swatinem/rust-cache@v2
-            - name: Build the project
-              run: cargo build
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the project
+        run: cargo build
 
-    rustfmt:
-        name: Rustfmt
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  components: rustfmt
-            - name: Run formatter
-              run: cargo fmt --check
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Run formatter
+        run: cargo fmt --check
 
-    clippy:
-        name: Clippy
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  components: clippy
-            - name: Run linter
-              run: cargo clippy -- -D warnings
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run linter
+        run: cargo clippy -- -D warnings
 
-    coverage:
-        name: Coverage
-        runs-on: ubuntu-latest
-        needs: [build, rustfmt, clippy]
-        steps:
-            - uses: actions/checkout@v4
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: taiki-e/install-action@cargo-llvm-cov
-            - name: Generate coverage
-              run: cargo llvm-cov --all-features --workspace --codecov --output-path codecov.json
-            - name: Upload coverage
-              uses: codecov/codecov-action@v4
-              with:
-                  token: ${{ secrets.CODECOV_TOKEN }}
-                  files: codecov.json
-                  fail_ci_if_error: true
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    needs: [build, rustfmt, clippy]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage
+        run: cargo llvm-cov --all-features --workspace --codecov --output-path codecov.json
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: codecov.json
+          fail_ci_if_error: true
