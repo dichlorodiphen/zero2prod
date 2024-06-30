@@ -1,5 +1,6 @@
 use std::net::TcpListener;
-use zero2prod::startup;
+use sqlx::{Connection, PgConnection};
+use zero2prod::{configuration, startup};
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -8,6 +9,13 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // and: an HTTP client
     let client = reqwest::Client::new();
+
+    // and: a database connection
+    let configuration = configuration::get_configuration().expect("Failed to read configuration.");
+    let connection_string = configuration.database.connection_string();
+    let mut connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
 
     // when: we send a request that's missing a name to the endpoint
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -21,6 +29,12 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // then: we receive a 200 OK
     assert_eq!(response.status(), 200);
+
+    // and: the new subscription exists in the database
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to fetch saved subscription.");
 }
 
 #[tokio::test]
