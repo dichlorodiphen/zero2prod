@@ -1,21 +1,14 @@
-use sqlx::{Connection, PgConnection};
+use sqlx::PgPool;
 use std::net::TcpListener;
 use zero2prod::{configuration, startup};
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // given: our app is running
-    let address = spawn_app();
+    let TestApp { address, db_pool } = spawn_app().await;
 
     // and: an HTTP client
     let client = reqwest::Client::new();
-
-    // and: a database connection
-    let configuration = configuration::get_configuration().expect("Failed to read configuration.");
-    let connection_string = configuration.database.connection_string();
-    let mut connection = PgConnection::connect(&connection_string)
-        .await
-        .expect("Failed to connect to Postgres.");
 
     // when: we send a request that's missing a name to the endpoint
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -32,15 +25,18 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // and: the new subscription exists in the database
     let saved = sqlx::query!("SELECT email, name FROM subscriptions")
-        .fetch_one(&mut connection)
+        .fetch_one(&db_pool)
         .await
         .expect("Failed to fetch saved subscription.");
+
+    assert_eq!(saved.email, "ursula_le_guin@gmail.com");
+    assert_eq!(saved.name, "le guin");
 }
 
 #[tokio::test]
 async fn subscribe_returns_a_400_when_a_required_parameter_is_missing() {
     // given: our app is running
-    let address = spawn_app();
+    let TestApp { address, .. } = spawn_app().await;
 
     // and: an HTTP client
     let client = reqwest::Client::new();
@@ -72,7 +68,7 @@ async fn subscribe_returns_a_400_when_a_required_parameter_is_missing() {
 #[tokio::test]
 async fn health_check_works() {
     // given: our app is running
-    let address = spawn_app();
+    let TestApp { address, .. } = spawn_app().await;
 
     // and: an HTTP client
     let client = reqwest::Client::new();
@@ -89,13 +85,28 @@ async fn health_check_works() {
     assert_eq!(response.content_length(), Some(0));
 }
 
-/// Starts the application and returns the address at which it is available.
-fn spawn_app() -> String {
+/// Encapsulates data about the test application.
+pub struct TestApp {
+    pub address: String,
+    pub db_pool: PgPool,
+}
+
+/// Starts the application and returns a TestApp, which contains data for the test application.
+async fn spawn_app() -> TestApp {
+    let configuration = configuration::get_configuration().expect("Failed to read configuration.");
+    let connection_string = configuration.database.connection_string();
+    let connection_pool = PgPool::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Postgres.");
+
     // Binding port 0 causes the OS to bind any available port.
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to a port");
     let port = listener.local_addr().unwrap().port();
-    let server = startup::run(listener).expect("Failed to bind address");
+    let server = startup::run(listener, connection_pool.clone()).expect("Failed to bind address");
     tokio::spawn(server);
 
-    format!("http://127.0.0.1:{port}")
+    TestApp {
+        address: format!("http://127.0.0.1:{}", port),
+        db_pool: connection_pool,
+    }
 }
