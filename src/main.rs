@@ -1,10 +1,13 @@
 //! src/main.rs
 
 use std::net::TcpListener;
-use zero2prod::startup;
+use zero2prod::{configuration::get_configuration, startup};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    let listener = TcpListener::bind("127.0.0.1:8000").expect("Could not bind to port 8000");
+    let configuration =
+        get_configuration().expect("Failed to read configuration from configuration.yaml.");
+    let address = format!("127.0.0.1:{}", configuration.application_port);
+    let listener = TcpListener::bind(address)?;
     startup::run(listener)?.await
 }
