@@ -26,6 +26,16 @@ impl DatabaseSettings {
 
         format!("postgresql://{user}:{password}@{host}:{port}/{dbname}")
     }
+
+    /// Produces a Postgres connection string without the database name.
+    pub fn connection_string_without_db(&self) -> String {
+        let user = &self.username;
+        let password = &self.password;
+        let host = &self.host;
+        let port = &self.port;
+
+        format!("postgresql://{user}:{password}@{host}:{port}")
+    }
 }
 
 /// Reads and deserializes configuration.yaml.
