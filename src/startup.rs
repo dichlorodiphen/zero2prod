@@ -1,6 +1,7 @@
 use crate::routes;
 use actix_web::{
     dev::Server,
+    middleware::Logger,
     web::{self, Data},
     App, HttpServer,
 };
@@ -12,6 +13,8 @@ pub fn run(listener: TcpListener, connection: PgPool) -> Result<Server, std::io:
     let connection = Data::new(connection);
     let server = HttpServer::new(move || {
         App::new()
+            // Wrap is used to register middleware.
+            .wrap(Logger::default())
             .route("/health_check", web::get().to(routes::health_check))
             .route("/subscriptions", web::post().to(routes::subscribe))
             .app_data(connection.clone())
